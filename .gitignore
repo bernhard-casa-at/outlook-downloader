@@ -38,8 +38,8 @@ env/
 Thumbs.db
 
 # Downloaded emails and attachments
-emails/
-attachments/
+emails*/
+attachments*/
 *.eml
 
 # Credentials and secrets
