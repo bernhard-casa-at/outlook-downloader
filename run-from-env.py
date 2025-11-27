@@ -58,8 +58,8 @@ def main():
         sys.exit(1)
 
     # Set defaults
-    mailbox = env_vars.get('MAILBOX_EMAIL', 'emma@emmaandlorenzo.com')
-    search_query = env_vars.get('SEARCH_QUERY', 'riproperty.co.uk OR jafri')
+    mailbox = env_vars.get('MAILBOX_EMAIL', 'user@example.com')
+    search_query = env_vars.get('SEARCH_QUERY', 'search terms here')
     message_dir = env_vars.get('MESSAGE_CONTENTS_DIR', './emails')
     attachments_dir = env_vars.get('ATTACHMENTS_DIR', './attachments')
 

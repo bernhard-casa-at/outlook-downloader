@@ -196,8 +196,8 @@ def main():
     tenant_id = env_vars['TENANT_ID']
     client_id = env_vars['CLIENT_ID']
     client_secret = env_vars['CLIENT_SECRET']
-    mailbox = env_vars.get('MAILBOX_EMAIL', 'emma@emmaandlorenzo.com')
-    search_query = env_vars.get('SEARCH_QUERY', 'riproperty.co.uk OR jafri')
+    mailbox = env_vars.get('MAILBOX_EMAIL', 'user@example.com')
+    search_query = env_vars.get('SEARCH_QUERY', 'search terms here')
 
     print(f"Mailbox: {mailbox}")
     print(f"Search query: {search_query}")
@@ -248,7 +248,8 @@ def main():
 
     # Method 4: Try individual search terms
     print("Method 4: Searching for individual terms")
-    terms = ['riproperty.co.uk', 'jafri']
+    # Extract terms from search query (split on OR)
+    terms = [term.strip() for term in search_query.split(' OR ')]
     try:
         term_counts = count_with_filter(token, mailbox, terms)
         print("  Results by term:")

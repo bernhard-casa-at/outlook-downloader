@@ -236,8 +236,8 @@ def main():
     tenant_id = env_vars['TENANT_ID']
     client_id = env_vars['CLIENT_ID']
     client_secret = env_vars['CLIENT_SECRET']
-    mailbox = env_vars.get('MAILBOX_EMAIL', 'emma@emmaandlorenzo.com')
-    search_query = env_vars.get('SEARCH_QUERY', 'riproperty.co.uk OR jafri')
+    mailbox = env_vars.get('MAILBOX_EMAIL', 'user@example.com')
+    search_query = env_vars.get('SEARCH_QUERY', 'search terms here')
 
     logger.info(f"Mailbox: {mailbox}")
     logger.info(f"Search query: {search_query}")

@@ -22,8 +22,8 @@ if [ -z "$TENANT_ID" ] || [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
 fi
 
 # Set defaults if not provided
-MAILBOX_EMAIL=${MAILBOX_EMAIL:-"emma@emmaandlorenzo.com"}
-SEARCH_QUERY=${SEARCH_QUERY:-"riproperty.co.uk OR jafri"}
+MAILBOX_EMAIL=${MAILBOX_EMAIL:-"user@example.com"}
+SEARCH_QUERY=${SEARCH_QUERY:-"search terms here"}
 MESSAGE_CONTENTS_DIR=${MESSAGE_CONTENTS_DIR:-"./emails"}
 ATTACHMENTS_DIR=${ATTACHMENTS_DIR:-"./attachments"}
 

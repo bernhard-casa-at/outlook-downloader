@@ -89,7 +89,7 @@ class OutlookDownloader:
         Search for emails using Graph API search endpoint with pagination
 
         Args:
-            search_query: Search query string (e.g., "riproperty.co.uk OR jafri")
+            search_query: Search query string (e.g., "searchterm1 OR searchterm2")
 
         Returns:
             List of email message objects
@@ -320,8 +320,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example usage:
-  %(prog)s --account emma@emmaandlorenzo.com \\
-    --search "riproperty.co.uk OR jafri" \\
+  %(prog)s --account user@example.com \\
+    --search "searchterm1 OR searchterm2" \\
     --message-contents ./emails \\
     --attachments-directory ./attachments \\
     --tenant-id YOUR_TENANT_ID \\
@@ -333,7 +333,7 @@ Example usage:
     parser.add_argument('--account', required=True,
                        help='Email address of the mailbox to access')
     parser.add_argument('--search', required=True,
-                       help='Search query string (e.g., "riproperty.co.uk OR jafri")')
+                       help='Search query string (e.g., "searchterm1 OR searchterm2")')
     parser.add_argument('--message-contents', required=True,
                        help='Directory to save email messages as EML files')
     parser.add_argument('--attachments-directory',

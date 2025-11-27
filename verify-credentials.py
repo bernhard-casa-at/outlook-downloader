@@ -142,7 +142,7 @@ def verify_credentials():
             print("4. Testing Graph API access:")
             print()
 
-            mailbox = env_vars.get('MAILBOX_EMAIL', 'emma@emmaandlorenzo.com')
+            mailbox = env_vars.get('MAILBOX_EMAIL', 'user@example.com')
             headers = {'Authorization': f'Bearer {result["access_token"]}'}
 
             # Try to get user info

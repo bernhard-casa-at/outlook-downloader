@@ -44,8 +44,8 @@ A Python utility to download emails and attachments from Microsoft 365 mailboxes
 
 ```bash
 python outlook-downloader.py \
-  --account emma@emmaandlorenzo.com \
-  --search "riproperty.co.uk OR jafri" \
+  --account user@example.com \
+  --search "searchterm1 OR searchterm2" \
   --message-contents ./emails \
   --attachments-directory ./attachments \
   --tenant-id YOUR_TENANT_ID \
@@ -71,10 +71,10 @@ python outlook-downloader.py \
 
 ```bash
 # Search for emails containing specific domain
---search "riproperty.co.uk"
+--search "example.com"
 
 # Search with OR operator
---search "riproperty.co.uk OR jafri"
+--search "searchterm1 OR searchterm2"
 
 # Search with AND operator
 --search "invoice AND urgent"
