@@ -175,6 +175,17 @@ python outlook-downloader.py \
 - `--state-db <path>` - Path to SQLite state database (default: `./downloader-state.db`)
 - `--verbose, -v` - Enable verbose logging
 
+### Search Query Examples
+
+```bash
+# Match emails with a specific subject substring
+--search "Report Domain:"
+
+# Other examples
+--search "Invoice"
+--search "Weekly Summary"
+```
+
 ### Output Format
 
 **Email files:**
