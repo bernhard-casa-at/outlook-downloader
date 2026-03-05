@@ -25,7 +25,7 @@ fi
 
 # Set defaults if not provided
 MAILBOX_EMAIL=${MAILBOX_EMAIL:-"user@example.com"}
-SEARCH_QUERY=${SEARCH_QUERY:-"*"}
+SEARCH_QUERY=${SEARCH_QUERY:-"Report Domain:"}
 MESSAGE_CONTENTS_DIR=${MESSAGE_CONTENTS_DIR:-"./emails"}
 ATTACHMENTS_DIR=${ATTACHMENTS_DIR:-"./attachments"}
 
@@ -38,4 +38,5 @@ python outlook-downloader.py \
     --tenant-id "$TENANT_ID" \
     --client-id "$CLIENT_ID" \
     --client-secret "$CLIENT_SECRET" \
+    --delete-after-download \
     "$@"

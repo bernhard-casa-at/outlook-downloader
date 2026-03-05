@@ -4,7 +4,6 @@ Outlook Downloader - Download emails and attachments from Microsoft 365 using Gr
 """
 
 import argparse
-import os
 import sys
 import logging
 from pathlib import Path
@@ -84,29 +83,34 @@ class OutlookDownloader:
             'Content-Type': 'application/json'
         }
 
-    def search_emails(self, search_query: str) -> List[Dict]:
+    def search_emails(self, subject_filter: str) -> List[Dict]:
         """
-        Search for emails using Graph API search endpoint with pagination
+        Fetch emails whose subject contains subject_filter using Graph API $filter with pagination.
 
         Args:
-            search_query: Search query string (e.g., "searchterm1 OR searchterm2")
+            subject_filter: Substring to match against the subject field
 
         Returns:
             List of email message objects
         """
-        logger.info(f"Searching for emails with query: {search_query}")
+        logger.info(f"Searching for emails with subject containing: {subject_filter}")
 
         all_messages = []
         url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/messages"
 
         params = {
-            '$search': f'"{search_query}"',
-            '$top': 50,  # Get 50 messages per page
-            '$select': 'id,subject,from,receivedDateTime,hasAttachments'
+            '$filter': (
+                f"receivedDateTime ge 1900-01-01T00:00:00Z"
+                f" and contains(subject,'{subject_filter}')"
+            ),
+            '$orderby': 'receivedDateTime asc',
+            '$top': 50,
+            '$count': 'true',
+            '$select': 'id,subject,from,receivedDateTime,hasAttachments',
         }
 
         headers = self._get_headers()
-        headers['ConsistencyLevel'] = 'eventual'  # Required for $search
+        headers['ConsistencyLevel'] = 'eventual'  # Required for $filter with $count
 
         page_count = 0
 
@@ -136,9 +140,28 @@ class OutlookDownloader:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error searching emails: {str(e)}")
-            if hasattr(e.response, 'text'):
+            if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Response: {e.response.text}")
             return []
+
+    def delete_email(self, message_id: str) -> bool:
+        """
+        Permanently delete an email from the mailbox.
+
+        Args:
+            message_id: ID of the message to delete
+
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        try:
+            url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/messages/{message_id}"
+            response = requests.delete(url, headers=self._get_headers())
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting message {message_id}: {str(e)}")
+            return False
 
     def download_email_as_eml(self, message_id: str, output_path: Path) -> bool:
         """
@@ -243,14 +266,16 @@ class OutlookDownloader:
         return sanitized if sanitized else 'unnamed'
 
     def process_emails(self, search_query: str, message_contents_dir: Path,
-                      attachments_dir: Optional[Path] = None) -> int:
+                       attachments_dir: Optional[Path] = None,
+                       delete_after_download: bool = False) -> int:
         """
         Search and download emails with their attachments
 
         Args:
-            search_query: Search query string
+            search_query: Substring to match against email subjects
             message_contents_dir: Directory to save EML files
             attachments_dir: Directory to save attachments (optional)
+            delete_after_download: Delete each email from server after successful download
 
         Returns:
             Number of emails successfully processed
@@ -303,6 +328,13 @@ class OutlookDownloader:
                     attachment_files = self.download_attachments(message_id, email_attachments_dir)
                     if attachment_files:
                         logger.info(f"Downloaded {len(attachment_files)} attachment(s)")
+
+                # Delete from server if requested
+                if delete_after_download:
+                    if self.delete_email(message_id):
+                        logger.info(f"Deleted from server: {subject[:50]}")
+                    else:
+                        logger.warning(f"Failed to delete from server: {subject[:50]}")
             else:
                 logger.warning(f"Failed to download email: {subject[:50]}")
 
@@ -348,6 +380,8 @@ Example usage:
                        help='Client secret value')
 
     # Optional parameters
+    parser.add_argument('--delete-after-download', action='store_true',
+                       help='Delete each email from the server after successful download')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
 
@@ -374,7 +408,8 @@ Example usage:
         count = downloader.process_emails(
             search_query=args.search,
             message_contents_dir=message_contents_path,
-            attachments_dir=attachments_path
+            attachments_dir=attachments_path,
+            delete_after_download=args.delete_after_download
         )
 
         if count > 0:
