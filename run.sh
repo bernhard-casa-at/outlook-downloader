@@ -2,8 +2,10 @@
 # Convenience script to run outlook-downloader with credentials from .env file
 
 # Activate virtual environment
-source $(which virtualenvwrapper.sh)
-workon outlook-downloader
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/.venv/bin/activate"
+fi
 
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
@@ -23,7 +25,7 @@ fi
 
 # Set defaults if not provided
 MAILBOX_EMAIL=${MAILBOX_EMAIL:-"user@example.com"}
-SEARCH_QUERY=${SEARCH_QUERY:-"search terms here"}
+SEARCH_QUERY=${SEARCH_QUERY:-"*"}
 MESSAGE_CONTENTS_DIR=${MESSAGE_CONTENTS_DIR:-"./emails"}
 ATTACHMENTS_DIR=${ATTACHMENTS_DIR:-"./attachments"}
 
