@@ -4,9 +4,11 @@ A Python utility to download emails and attachments from Microsoft 365 mailboxes
 
 ## Features
 
-- Search emails using Microsoft Graph API search queries
+- Filter emails by subject substring using Microsoft Graph API
 - Download emails in EML format (preserves original MIME content)
 - Download attachments with unique filenames
+- Optionally delete emails from the server after successful download
+- SQLite state database to prevent duplicate downloads and enable crash recovery
 - Handle pagination for large result sets
 - Client credentials authentication using MSAL
 - Comprehensive error handling and logging
@@ -18,7 +20,7 @@ A Python utility to download emails and attachments from Microsoft 365 mailboxes
   - Tenant ID
   - Client ID (Application ID)
   - Client Secret
-  - API Permissions: `Mail.Read` (Application permission)
+  - API Permissions: `Mail.Read` and `Mail.ReadWrite` (Application permissions)
 
 ## Azure AD Application Setup
 
@@ -69,9 +71,10 @@ After registration, you'll be taken to the app's Overview page:
 2. Click **+ Add a permission**
 3. Select **Microsoft Graph**
 4. Select **Application permissions** (not Delegated permissions)
-5. Search for "Mail.Read" and expand **Mail**
-6. Check the box next to **Mail.Read**
-7. Click **Add permissions** at the bottom
+5. Search for and add the following permissions under **Mail**:
+   - **Mail.Read** — read emails
+   - **Mail.ReadWrite** — required for deleting emails from the server
+6. Click **Add permissions** at the bottom
 
 ### Step 5: Grant Admin Consent
 
@@ -104,16 +107,18 @@ TENANT_ID=your-tenant-id-from-step-2
 CLIENT_ID=your-client-id-from-step-2
 CLIENT_SECRET=your-client-secret-from-step-3
 MAILBOX_EMAIL=user@yourdomain.com
-SEARCH_QUERY=your search terms
+SEARCH_QUERY=Report Domain:
+STATE_DB=./downloader-state.db
 ```
 
 **Security Note**: Never commit the `.env` file to version control. It's already in `.gitignore`.
 
 ## Setup
 
-1. **Create virtual environment** (if not already done):
+1. **Create virtual environment**:
    ```bash
-   mkvirtualenv outlook-downloader -p python3.11
+   python3 -m venv .venv
+   source .venv/bin/activate
    ```
 
 2. **Install dependencies**:
@@ -129,31 +134,26 @@ SEARCH_QUERY=your search terms
 
 ## Usage
 
-### Recommended: Use the Comprehensive Downloader
+### Using run.sh (recommended)
 
-The comprehensive downloader searches all possible locations to maximize email discovery:
+The simplest way to run the downloader is via `run.sh`, which reads all configuration from `.env`:
 
 ```bash
-python download-comprehensive.py --verbose
+./run.sh
 ```
 
-This script:
-- Searches the main mailbox messages
-- Searches archive mailbox (if available)
-- Searches special folders (recoverable items, etc.)
-- Deduplicates results automatically
-- Achieved 95.6% coverage in testing (303 out of 317 emails)
+This will download all emails whose subject contains `SEARCH_QUERY`, delete them from the server after successful download, and record every action in the state database.
 
-### Alternative: Direct Command-line Usage
-
-If you prefer to specify all parameters on the command line:
+### Direct Command-line Usage
 
 ```bash
 python outlook-downloader.py \
   --account user@example.com \
-  --search "searchterm1 OR searchterm2" \
+  --search "Report Domain:" \
   --message-contents ./emails \
   --attachments-directory ./attachments \
+  --delete-after-download \
+  --state-db ./downloader-state.db \
   --tenant-id YOUR_TENANT_ID \
   --client-id YOUR_CLIENT_ID \
   --client-secret YOUR_CLIENT_SECRET
@@ -163,7 +163,7 @@ python outlook-downloader.py \
 
 **Required arguments:**
 - `--account <email>` - Email address of the mailbox to access
-- `--search <query>` - Search query string (supports Boolean operators: AND, OR, NOT)
+- `--search <substring>` - Subject substring to filter emails by
 - `--message-contents <directory>` - Directory to save email messages as EML files
 - `--tenant-id <id>` - Azure AD tenant ID
 - `--client-id <id>` - Application (client) ID
@@ -171,24 +171,9 @@ python outlook-downloader.py \
 
 **Optional arguments:**
 - `--attachments-directory <directory>` - Directory to save attachments
+- `--delete-after-download` - Delete each email from the server after successful download
+- `--state-db <path>` - Path to SQLite state database (default: `./downloader-state.db`)
 - `--verbose, -v` - Enable verbose logging
-
-### Search Query Examples
-
-```bash
-# Search for emails containing specific domain
---search "example.com"
-
-# Search with OR operator
---search "searchterm1 OR searchterm2"
-
-# Search with AND operator
---search "invoice AND urgent"
-
-# Search in specific fields
---search "from:john@example.com"
---search "subject:meeting"
-```
 
 ### Output Format
 
@@ -256,11 +241,25 @@ The script includes built-in delays to avoid rate limiting. If you still encount
 - Try again after a few minutes
 - Consider reducing the search scope
 
+## State Database
+
+The downloader maintains a SQLite database (`downloader-state.db` by default) that tracks every processed email. On each run:
+
+- Emails already downloaded **and** deleted are skipped entirely
+- Emails downloaded but not yet deleted (e.g. after a crash) skip the download and retry the delete
+
+You can inspect the database at any time:
+
+```bash
+sqlite3 downloader-state.db "SELECT subject, downloaded_at, deleted_from_server FROM messages;"
+```
+
 ## API Permissions Required
 
 | Permission | Type | Description |
 |------------|------|-------------|
 | Mail.Read | Application | Read mail in all mailboxes |
+| Mail.ReadWrite | Application | Required for deleting emails from the server |
 
 ## Security Notes
 

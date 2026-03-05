@@ -28,6 +28,7 @@ MAILBOX_EMAIL=${MAILBOX_EMAIL:-"user@example.com"}
 SEARCH_QUERY=${SEARCH_QUERY:-"Report Domain:"}
 MESSAGE_CONTENTS_DIR=${MESSAGE_CONTENTS_DIR:-"./emails"}
 ATTACHMENTS_DIR=${ATTACHMENTS_DIR:-"./attachments"}
+STATE_DB=${STATE_DB:-"./downloader-state.db"}
 
 # Run the downloader
 python outlook-downloader.py \
@@ -39,4 +40,5 @@ python outlook-downloader.py \
     --client-id "$CLIENT_ID" \
     --client-secret "$CLIENT_SECRET" \
     --delete-after-download \
+    --state-db "$STATE_DB" \
     "$@"

@@ -4,8 +4,10 @@ Outlook Downloader - Download emails and attachments from Microsoft 365 using Gr
 """
 
 import argparse
+import sqlite3
 import sys
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 import msal
 import requests
@@ -20,6 +22,67 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class StateDB:
+    """SQLite-backed store tracking download and delete status per message."""
+
+    def __init__(self, db_path: Path):
+        self.conn = sqlite3.connect(db_path)
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                message_id       TEXT PRIMARY KEY,
+                subject          TEXT,
+                received_datetime TEXT,
+                downloaded_at    TEXT NOT NULL,
+                eml_path         TEXT,
+                deleted_from_server INTEGER NOT NULL DEFAULT 0,
+                deleted_at       TEXT
+            )
+        """)
+        self.conn.commit()
+
+    def is_downloaded(self, message_id: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM messages WHERE message_id = ?", (message_id,)
+        ).fetchone()
+        return row is not None
+
+    def is_deleted(self, message_id: str) -> bool:
+        row = self.conn.execute(
+            "SELECT deleted_from_server FROM messages WHERE message_id = ?",
+            (message_id,)
+        ).fetchone()
+        return row is not None and bool(row[0])
+
+    def record_download(self, message_id: str, subject: str,
+                        received_datetime: str, eml_path: str):
+        now = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO messages
+                (message_id, subject, received_datetime, downloaded_at, eml_path)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (message_id, subject, received_datetime, now, eml_path),
+        )
+        self.conn.commit()
+
+    def record_delete(self, message_id: str):
+        now = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            """
+            UPDATE messages
+            SET deleted_from_server = 1, deleted_at = ?
+            WHERE message_id = ?
+            """,
+            (now, message_id),
+        )
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
 
 
 class OutlookDownloader:
@@ -267,7 +330,8 @@ class OutlookDownloader:
 
     def process_emails(self, search_query: str, message_contents_dir: Path,
                        attachments_dir: Optional[Path] = None,
-                       delete_after_download: bool = False) -> int:
+                       delete_after_download: bool = False,
+                       state_db: Optional['StateDB'] = None) -> int:
         """
         Search and download emails with their attachments
 
@@ -276,6 +340,7 @@ class OutlookDownloader:
             message_contents_dir: Directory to save EML files
             attachments_dir: Directory to save attachments (optional)
             delete_after_download: Delete each email from server after successful download
+            state_db: Optional StateDB instance to track progress and prevent duplicates
 
         Returns:
             Number of emails successfully processed
@@ -308,35 +373,51 @@ class OutlookDownloader:
 
             logger.info(f"Processing {idx}/{len(messages)}: {subject[:50]}...")
 
-            # Create filename from date and subject
-            date_prefix = received_date[:10] if received_date else 'unknown_date'
-            safe_subject = self.sanitize_filename(subject, max_length=100)
-            eml_filename = f"{date_prefix}_{idx:04d}_{safe_subject}.eml"
-            eml_path = message_contents_dir / eml_filename
+            # Skip if already fully processed
+            if state_db and state_db.is_deleted(message_id):
+                logger.info(f"Skipping (already downloaded and deleted): {subject[:50]}")
+                success_count += 1
+                continue
 
-            # Download email as EML
-            if self.download_email_as_eml(message_id, eml_path):
+            already_downloaded = state_db and state_db.is_downloaded(message_id)
+
+            if not already_downloaded:
+                # Create filename from date and subject
+                date_prefix = received_date[:10] if received_date else 'unknown_date'
+                safe_subject = self.sanitize_filename(subject, max_length=100)
+                eml_filename = f"{date_prefix}_{idx:04d}_{safe_subject}.eml"
+                eml_path = message_contents_dir / eml_filename
+
+                if not self.download_email_as_eml(message_id, eml_path):
+                    logger.warning(f"Failed to download email: {subject[:50]}")
+                    time.sleep(0.3)
+                    continue
+
                 logger.info(f"Saved email to: {eml_filename}")
                 success_count += 1
 
+                if state_db:
+                    state_db.record_download(message_id, subject, received_date, str(eml_path))
+
                 # Download attachments if requested and available
                 if attachments_dir and has_attachments:
-                    # Create subdirectory for this email's attachments
                     email_attachments_dir = attachments_dir / f"{date_prefix}_{idx:04d}_{safe_subject}"
                     email_attachments_dir.mkdir(parents=True, exist_ok=True)
-
                     attachment_files = self.download_attachments(message_id, email_attachments_dir)
                     if attachment_files:
                         logger.info(f"Downloaded {len(attachment_files)} attachment(s)")
-
-                # Delete from server if requested
-                if delete_after_download:
-                    if self.delete_email(message_id):
-                        logger.info(f"Deleted from server: {subject[:50]}")
-                    else:
-                        logger.warning(f"Failed to delete from server: {subject[:50]}")
             else:
-                logger.warning(f"Failed to download email: {subject[:50]}")
+                logger.info(f"Skipping download (already on disk): {subject[:50]}")
+                success_count += 1
+
+            # Delete from server if requested (runs for both fresh and retry cases)
+            if delete_after_download:
+                if self.delete_email(message_id):
+                    logger.info(f"Deleted from server: {subject[:50]}")
+                    if state_db:
+                        state_db.record_delete(message_id)
+                else:
+                    logger.warning(f"Failed to delete from server: {subject[:50]}")
 
             # Small delay to avoid rate limiting
             time.sleep(0.3)
@@ -382,6 +463,8 @@ Example usage:
     # Optional parameters
     parser.add_argument('--delete-after-download', action='store_true',
                        help='Delete each email from the server after successful download')
+    parser.add_argument('--state-db', default='./downloader-state.db',
+                       help='Path to SQLite state database (default: ./downloader-state.db)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
 
@@ -403,13 +486,16 @@ Example usage:
         mailbox=args.account
     )
 
+    state_db = StateDB(Path(args.state_db))
+
     # Process emails
     try:
         count = downloader.process_emails(
             search_query=args.search,
             message_contents_dir=message_contents_path,
             attachments_dir=attachments_path,
-            delete_after_download=args.delete_after_download
+            delete_after_download=args.delete_after_download,
+            state_db=state_db
         )
 
         if count > 0:
@@ -425,6 +511,8 @@ Example usage:
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         sys.exit(1)
+    finally:
+        state_db.close()
 
 
 if __name__ == '__main__':
