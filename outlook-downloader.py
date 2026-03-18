@@ -157,7 +157,8 @@ class OutlookDownloader:
             Folder ID string, or None if not found
         """
         url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/mailFolders"
-        params = {'$filter': f"displayName eq '{folder_name}'", '$top': 1}
+        safe_name = folder_name.replace("'", "''")
+        params = {'$filter': f"displayName eq '{safe_name}'", '$top': 1}
         try:
             response = requests.get(url, headers=self._get_headers(), params=params)
             response.raise_for_status()
@@ -191,10 +192,11 @@ class OutlookDownloader:
         else:
             url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/messages"
 
+        safe_subject = subject_filter.replace("'", "''")
         params = {
             '$filter': (
                 f"receivedDateTime ge 1900-01-01T00:00:00Z"
-                f" and contains(subject,'{subject_filter}')"
+                f" and contains(subject,'{safe_subject}')"
             ),
             '$orderby': 'receivedDateTime asc',
             '$top': 50,
