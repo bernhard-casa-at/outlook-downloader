@@ -56,3 +56,6 @@ secrets.json
 .pytest_cache/
 .coverage
 htmlcov/
+
+# DB
+downloader-state.db
