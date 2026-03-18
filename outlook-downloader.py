@@ -146,12 +146,39 @@ class OutlookDownloader:
             'Content-Type': 'application/json'
         }
 
-    def search_emails(self, subject_filter: str) -> List[Dict]:
+    def get_folder_id(self, folder_name: str) -> Optional[str]:
+        """
+        Resolve a mail folder display name to its Graph API ID.
+
+        Args:
+            folder_name: Display name of the folder (e.g. 'DMARC')
+
+        Returns:
+            Folder ID string, or None if not found
+        """
+        url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/mailFolders"
+        params = {'$filter': f"displayName eq '{folder_name}'", '$top': 1}
+        try:
+            response = requests.get(url, headers=self._get_headers(), params=params)
+            response.raise_for_status()
+            folders = response.json().get('value', [])
+            if not folders:
+                logger.error(f"Folder '{folder_name}' not found in mailbox")
+                return None
+            folder_id = folders[0]['id']
+            logger.info(f"Resolved folder '{folder_name}' to ID: {folder_id[:20]}...")
+            return folder_id
+        except Exception as e:
+            logger.error(f"Error resolving folder '{folder_name}': {str(e)}")
+            return None
+
+    def search_emails(self, subject_filter: str, folder_id: Optional[str] = None) -> List[Dict]:
         """
         Fetch emails whose subject contains subject_filter using Graph API $filter with pagination.
 
         Args:
             subject_filter: Substring to match against the subject field
+            folder_id: Optional folder ID to restrict search to a specific folder
 
         Returns:
             List of email message objects
@@ -159,7 +186,10 @@ class OutlookDownloader:
         logger.info(f"Searching for emails with subject containing: {subject_filter}")
 
         all_messages = []
-        url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/messages"
+        if folder_id:
+            url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/mailFolders/{folder_id}/messages"
+        else:
+            url = f"{self.GRAPH_API_ENDPOINT}/users/{self.mailbox}/messages"
 
         params = {
             '$filter': (
@@ -331,7 +361,8 @@ class OutlookDownloader:
     def process_emails(self, search_query: str, message_contents_dir: Path,
                        attachments_dir: Optional[Path] = None,
                        delete_after_download: bool = False,
-                       state_db: Optional['StateDB'] = None) -> int:
+                       state_db: Optional['StateDB'] = None,
+                       folder_name: Optional[str] = None) -> int:
         """
         Search and download emails with their attachments
 
@@ -341,6 +372,7 @@ class OutlookDownloader:
             attachments_dir: Directory to save attachments (optional)
             delete_after_download: Delete each email from server after successful download
             state_db: Optional StateDB instance to track progress and prevent duplicates
+            folder_name: Optional folder display name to restrict processing (e.g. 'DMARC')
 
         Returns:
             Number of emails successfully processed
@@ -355,8 +387,15 @@ class OutlookDownloader:
         if attachments_dir:
             attachments_dir.mkdir(parents=True, exist_ok=True)
 
+        # Resolve folder if specified
+        folder_id = None
+        if folder_name:
+            folder_id = self.get_folder_id(folder_name)
+            if folder_id is None:
+                return 0
+
         # Search for emails
-        messages = self.search_emails(search_query)
+        messages = self.search_emails(search_query, folder_id=folder_id)
 
         if not messages:
             logger.warning("No messages found matching the search criteria")
@@ -460,6 +499,9 @@ Example usage:
     parser.add_argument('--client-secret', required=True,
                        help='Client secret value')
 
+    parser.add_argument('--folder', required=True,
+                       help='Mailbox folder to process (e.g. "DMARC" or "Inbox")')
+
     # Optional parameters
     parser.add_argument('--delete-after-download', action='store_true',
                        help='Delete each email from the server after successful download')
@@ -495,7 +537,8 @@ Example usage:
             message_contents_dir=message_contents_path,
             attachments_dir=attachments_path,
             delete_after_download=args.delete_after_download,
-            state_db=state_db
+            state_db=state_db,
+            folder_name=args.folder
         )
 
         if count > 0:

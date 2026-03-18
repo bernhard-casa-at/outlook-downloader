@@ -29,6 +29,7 @@ SEARCH_QUERY=${SEARCH_QUERY:-"Report Domain:"}
 MESSAGE_CONTENTS_DIR=${MESSAGE_CONTENTS_DIR:-"./emails"}
 ATTACHMENTS_DIR=${ATTACHMENTS_DIR:-"./attachments"}
 STATE_DB=${STATE_DB:-"./downloader-state.db"}
+FOLDER=${FOLDER:?Error: FOLDER must be set in .env (e.g. FOLDER=DMARC)}
 
 # Run the downloader
 python outlook-downloader.py \
@@ -41,4 +42,5 @@ python outlook-downloader.py \
     --client-secret "$CLIENT_SECRET" \
     --delete-after-download \
     --state-db "$STATE_DB" \
+    --folder "$FOLDER" \
     "$@"
